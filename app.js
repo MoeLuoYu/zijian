@@ -1,0 +1,626 @@
+(function () {
+  "use strict";
+
+  const $ = (selector) => document.querySelector(selector);
+  const $$ = (selector) => Array.from(document.querySelectorAll(selector));
+
+  const DEFAULT_TEXT =
+    "文字原本安静地排列在纸上，每一笔都依靠另一笔维持自己的位置。可是当手指靠近，结构开始松动：偏旁离开字心，标点漂向边缘，句子不再只负责传递意义，也显露出重量、方向和速度。我们触碰一个词，它便从熟悉的秩序里散开；我们停止施力，它又被微弱的引力牵回原处。阅读在这里不再是一条笔直的道路，而像一间可以进入的房间。风从字缝穿过，墨色的碎片彼此避让、旋转，又在下一次触碰前短暂安静。你可以把一段记忆放进来，也可以写下尚未想清楚的问题。版面保留了文字曾经站立的位置，而运动让那些位置变得可见：每一个字既是语言，也是由形状组成的临时建筑。";
+
+  const PRESETS = {
+    print: {
+      name: "掉字 / 印刷脱落",
+      description: "局部部件轻微错位后停住，留下仍可辨认的空洞。",
+      values: { radius: 35, breakRate: 40, repulsion: 15, gravity: 10, drift: 20, rotation: 20, drag: 80, returnForce: 0, cohesion: 10, pointerMomentum: 5, damageRate: 0 },
+    },
+    uncanny: {
+      name: "文字恐怖谷",
+      description: "碎片不飞远，而是互相靠拢成仍像文字的陌生团块。",
+      values: { radius: 80, breakRate: 65, repulsion: 18, gravity: 5, drift: 35, rotation: 35, drag: 65, returnForce: 0, cohesion: 55, pointerMomentum: 10, damageRate: 0 },
+    },
+    water: {
+      name: "水面",
+      description: "手势带走附近部件；扰动结束后，文字像水面一样恢复。",
+      values: { radius: 120, breakRate: 100, repulsion: 45, gravity: 0, drift: 8, rotation: 12, drag: 45, returnForce: 75, cohesion: 0, pointerMomentum: 75, damageRate: 0 },
+    },
+    collapse: {
+      name: "坍塌",
+      description: "部件失去排版支撑，在重力下坠落并停留于画布底部。",
+      values: { radius: 100, breakRate: 85, repulsion: 5, gravity: 70, drift: 15, rotation: 45, drag: 15, returnForce: 0, cohesion: 15, pointerMomentum: 8, damageRate: 0 },
+    },
+    explode: {
+      name: "爆炸",
+      description: "高排斥和高旋转让触点附近的部件向四周快速飞散。",
+      values: { radius: 90, breakRate: 100, repulsion: 100, gravity: 15, drift: 20, rotation: 90, drag: 10, returnForce: 0, cohesion: 0, pointerMomentum: 15, damageRate: 0 },
+    },
+    decay: {
+      name: "腐烂 / 侵蚀",
+      description: "反复摩擦会累积损伤；部件达到临界值后才脱落。",
+      values: { radius: 45, breakRate: 25, repulsion: 8, gravity: 20, drift: 10, rotation: 15, drag: 75, returnForce: 0, cohesion: 5, pointerMomentum: 5, damageRate: 20 },
+    },
+  };
+
+  const els = {
+    input: $("#text-input"), count: $("#char-count"), compose: $("#compose-button"),
+    export: $("#export-button"), reset: $("#reset-button"), pause: $("#pause-button"),
+    stage: $("#stage"), canvasShell: $("#canvas-shell"), empty: $("#empty-state"),
+    hint: $("#canvas-hint"), state: $("#canvas-state"), statGlyphs: $("#stat-glyphs"),
+    statParts: $("#stat-parts"), statFallback: $("#stat-fallback"),
+    analysisNote: $("#analysis-note"), presetDescription: $("#preset-description"),
+  };
+
+  const layoutInputs = ["layout-width", "layout-height", "font-size", "line-height", "letter-spacing", "fragmentation"];
+  const physicsInputs = ["radius", "break-rate", "repulsion", "gravity", "drift", "rotation", "drag", "return-force", "cohesion", "pointer-momentum", "damage-rate"];
+  const controls = Object.fromEntries([...layoutInputs, ...physicsInputs].map((id) => [id, document.getElementById(id)]));
+
+  const state = {
+    particles: [], width: 720, height: 640, dpr: 1, viewScale: 1,
+    paused: false, generated: false, lastTime: 0, elapsed: 0, raf: 0,
+    pointerDown: false, pointer: null, lastBurst: 0, eventCounter: 0,
+    hintTimer: 0, resizeObserver: null, activePreset: "print", applyingPreset: false,
+  };
+
+  const ctx = els.stage.getContext("2d");
+
+  function updateCharacterCount() {
+    const count = Array.from(els.input.value).length;
+    els.count.textContent = `${count} / 2000`;
+    els.count.classList.toggle("is-near-limit", count > 1800);
+  }
+
+  function setRangeProgress(input) {
+    const min = Number(input.min);
+    const max = Number(input.max);
+    const value = Number(input.value);
+    input.style.setProperty("--value", `${((value - min) / (max - min)) * 100}%`);
+  }
+
+  function fragmentationName(value) {
+    if (value < 20) return "字符";
+    if (value < 50) return "部件";
+    if (value < 78) return "笔画";
+    return "碎屑";
+  }
+
+  function formatControl(input) {
+    const output = document.querySelector(`output[for="${input.id}"]`);
+    if (output) output.textContent = input.id === "fragmentation" ? fragmentationName(Number(input.value)) : input.value;
+    setRangeProgress(input);
+  }
+
+  function updateAllControls() {
+    Object.values(controls).forEach(formatControl);
+  }
+
+  function getLayout() {
+    return {
+      width: Number(controls["layout-width"].value), height: Number(controls["layout-height"].value),
+      fontSize: Number(controls["font-size"].value), lineHeight: Number(controls["line-height"].value),
+      letterSpacing: Number(controls["letter-spacing"].value), fragmentation: Number(controls.fragmentation.value),
+    };
+  }
+
+  function getPhysics() {
+    return {
+      radius: Number(controls.radius.value), breakRate: Number(controls["break-rate"].value),
+      repulsion: Number(controls.repulsion.value), gravity: Number(controls.gravity.value),
+      drift: Number(controls.drift.value), rotation: Number(controls.rotation.value),
+      drag: Number(controls.drag.value), returnForce: Number(controls["return-force"].value),
+      cohesion: Number(controls.cohesion.value), pointerMomentum: Number(controls["pointer-momentum"].value),
+      damageRate: Number(controls["damage-rate"].value),
+    };
+  }
+
+  function keyFromPhysicsName(name) {
+    return { breakRate: "break-rate", returnForce: "return-force", pointerMomentum: "pointer-momentum", damageRate: "damage-rate" }[name] || name;
+  }
+
+  function applyPreset(key) {
+    const preset = PRESETS[key];
+    if (!preset) return;
+    state.applyingPreset = true;
+    state.activePreset = key;
+    for (const [name, value] of Object.entries(preset.values)) {
+      const input = controls[keyFromPhysicsName(name)];
+      input.value = value;
+      formatControl(input);
+    }
+    $$(".effect-preset").forEach((button) => button.classList.toggle("is-active", button.dataset.effect === key));
+    els.presetDescription.innerHTML = `<strong>${preset.name}</strong><p>${preset.description}</p>`;
+    state.applyingPreset = false;
+  }
+
+  function resizeCanvas() {
+    if (!state.generated) return;
+    const availableWidth = els.canvasShell.clientWidth;
+    const availableHeight = els.canvasShell.clientHeight;
+    state.viewScale = Math.max(0.1, Math.min(availableWidth / state.width, availableHeight / state.height));
+    const cssWidth = state.width * state.viewScale;
+    const cssHeight = state.height * state.viewScale;
+    state.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    els.stage.style.width = `${cssWidth}px`;
+    els.stage.style.height = `${cssHeight}px`;
+    els.stage.style.position = "absolute";
+    els.stage.style.left = `${(availableWidth - cssWidth) / 2}px`;
+    els.stage.style.top = `${(availableHeight - cssHeight) / 2}px`;
+    els.stage.width = Math.round(state.width * state.dpr);
+    els.stage.height = Math.round(state.height * state.dpr);
+    draw();
+  }
+
+  function layoutGlyphs(text, settings) {
+    const measureCanvas = document.createElement("canvas");
+    const measure = measureCanvas.getContext("2d");
+    const fontFamily = '"Songti SC", "STSong", "Noto Serif CJK SC", "Source Han Serif SC", serif';
+    const font = `500 ${settings.fontSize}px ${fontFamily}`;
+    measure.font = font;
+    measure.textBaseline = "alphabetic";
+    const padding = Math.max(26, settings.fontSize * 1.15);
+    const lineAdvance = settings.fontSize * settings.lineHeight;
+    const baselineOffset = settings.fontSize * 0.88;
+    let x = padding;
+    let y = padding + baselineOffset;
+    let clipped = false;
+    const glyphs = [];
+
+    for (const char of Array.from(text)) {
+      if (char === "\r") continue;
+      if (char === "\n") {
+        x = padding;
+        y += lineAdvance;
+        if (y + settings.fontSize * 0.3 > settings.height - padding) { clipped = true; break; }
+        continue;
+      }
+      const metrics = measure.measureText(char);
+      const width = Math.max(metrics.width, settings.fontSize * (char.trim() ? 0.55 : 0.5));
+      const advance = width + settings.letterSpacing;
+      if (x + width > settings.width - padding && char.trim()) { x = padding; y += lineAdvance; }
+      if (y + settings.fontSize * 0.3 > settings.height - padding) { clipped = true; break; }
+      if (char.trim()) glyphs.push({ char, x, y, font, fontSize: settings.fontSize, width });
+      x += advance;
+    }
+    return { glyphs, clipped };
+  }
+
+  function boundsForPixels(pixels, width, height) {
+    let minX = width, minY = height, maxX = 0, maxY = 0;
+    for (const index of pixels) {
+      const x = index % width;
+      const y = Math.floor(index / width);
+      minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+    }
+    return { pixels, minX, minY, maxX, maxY };
+  }
+
+  function findConnectedComponents(data, width, height, threshold) {
+    const visited = new Uint8Array(width * height);
+    const components = [];
+    const neighbors = [-1, 1, -width, width, -width - 1, -width + 1, width - 1, width + 1];
+    for (let index = 0; index < width * height; index += 1) {
+      if (visited[index] || data[index * 4 + 3] < threshold) continue;
+      const stack = [index];
+      const pixels = [];
+      visited[index] = 1;
+      while (stack.length) {
+        const current = stack.pop();
+        const px = current % width;
+        const py = Math.floor(current / width);
+        pixels.push(current);
+        for (const offset of neighbors) {
+          const next = current + offset;
+          if (next < 0 || next >= width * height || visited[next]) continue;
+          const nx = next % width;
+          const ny = Math.floor(next / width);
+          if (Math.abs(nx - px) > 1 || Math.abs(ny - py) > 1) continue;
+          if (data[next * 4 + 3] >= threshold) { visited[next] = 1; stack.push(next); }
+        }
+      }
+      if (pixels.length >= 5) components.push(boundsForPixels(pixels, width, height));
+    }
+    components.sort((a, b) => b.pixels.length - a.pixels.length);
+    return components;
+  }
+
+  function mergeTinyComponents(components, width, height) {
+    if (!components.length) return [];
+    const mainArea = components[0].pixels.length;
+    const stable = components.filter((part) => part.pixels.length >= Math.max(8, mainArea * 0.008));
+    const tiny = components.filter((part) => !stable.includes(part));
+    if (!stable.length) stable.push(components[0]);
+    if (tiny.length) stable[0] = boundsForPixels(stable[0].pixels.concat(tiny.flatMap((part) => part.pixels)), width, height);
+    return stable;
+  }
+
+  function splitComponentsIntoCells(components, width, height, fontSize, fragmentation, scale) {
+    const factor = (fragmentation - 50) / 50;
+    const cellSize = Math.max(8, Math.round(fontSize * scale * (0.62 - factor * 0.4)));
+    const groups = [];
+    for (const component of components) {
+      const cells = new Map();
+      for (const pixel of component.pixels) {
+        const x = pixel % width;
+        const y = Math.floor(pixel / width);
+        const key = `${Math.floor((x - component.minX) / cellSize)}:${Math.floor((y - component.minY) / cellSize)}`;
+        if (!cells.has(key)) cells.set(key, []);
+        cells.get(key).push(pixel);
+      }
+      const substantial = [];
+      const crumbs = [];
+      for (const pixels of cells.values()) {
+        if (pixels.length >= 5) substantial.push(pixels);
+        else crumbs.push(...pixels);
+      }
+      if (!substantial.length) substantial.push(component.pixels);
+      if (crumbs.length) substantial[0] = substantial[0].concat(crumbs);
+      groups.push(...substantial.map((pixels) => boundsForPixels(pixels, width, height)));
+    }
+    groups.sort((a, b) => b.pixels.length - a.pixels.length);
+    if (groups.length <= 24) return groups;
+    const kept = groups.slice(0, 24);
+    kept[0] = boundsForPixels(kept[0].pixels.concat(groups.slice(24).flatMap((part) => part.pixels)), width, height);
+    return kept;
+  }
+
+  function createPiece(group, image, imageWidth, scale, pad, baseline, glyph, index, fallback) {
+    const cropWidth = group.maxX - group.minX + 1;
+    const cropHeight = group.maxY - group.minY + 1;
+    const pieceCanvas = document.createElement("canvas");
+    pieceCanvas.width = cropWidth;
+    pieceCanvas.height = cropHeight;
+    const pieceCtx = pieceCanvas.getContext("2d");
+    const pieceData = pieceCtx.createImageData(cropWidth, cropHeight);
+    for (const pixelIndex of group.pixels) {
+      const px = pixelIndex % imageWidth;
+      const py = Math.floor(pixelIndex / imageWidth);
+      const source = pixelIndex * 4;
+      const target = ((py - group.minY) * cropWidth + (px - group.minX)) * 4;
+      pieceData.data[target] = 37; pieceData.data[target + 1] = 35; pieceData.data[target + 2] = 31;
+      pieceData.data[target + 3] = image.data[source + 3];
+    }
+    pieceCtx.putImageData(pieceData, 0, 0);
+    const localX = group.minX / scale - pad;
+    const localY = group.minY / scale - baseline;
+    const drawWidth = cropWidth / scale;
+    const drawHeight = cropHeight / scale;
+    const originX = glyph.x + localX + drawWidth / 2;
+    const originY = glyph.y + localY + drawHeight / 2;
+    return {
+      image: pieceCanvas, x: originX, y: originY, originX, originY, width: drawWidth, height: drawHeight,
+      vx: 0, vy: 0, angle: 0, angularVelocity: 0, active: false, activeAge: 0, damage: 0, fallback, neighbors: [],
+      seed: ((glyph.char.codePointAt(0) || 1) * 31 + index * 71 + Math.round(originX * 3)) % 1009,
+    };
+  }
+
+  function splitGlyph(glyph, fragmentation) {
+    const scale = 2;
+    const pad = Math.ceil(glyph.fontSize * 0.42);
+    const width = Math.ceil((glyph.width + pad * 2) * scale);
+    const height = Math.ceil((glyph.fontSize * 1.55 + pad * 2) * scale);
+    const offscreen = document.createElement("canvas");
+    offscreen.width = width;
+    offscreen.height = height;
+    const off = offscreen.getContext("2d", { willReadFrequently: true });
+    off.scale(scale, scale);
+    off.fillStyle = "#25231f";
+    off.font = glyph.font;
+    off.textBaseline = "alphabetic";
+    const baseline = pad + glyph.fontSize;
+    off.fillText(glyph.char, pad, baseline);
+    off.setTransform(1, 0, 0, 1, 0, 0);
+    const image = off.getImageData(0, 0, width, height);
+    const connected = mergeTinyComponents(findConnectedComponents(image.data, width, height, 42), width, height);
+    if (!connected.length) return { pieces: [], fallback: true };
+    let groups;
+    let fallback = false;
+    if (fragmentation < 20) {
+      groups = [boundsForPixels(connected.flatMap((part) => part.pixels), width, height)];
+    } else if (fragmentation < 50) {
+      groups = connected.slice(0, 12);
+      fallback = groups.length === 1;
+    } else {
+      groups = splitComponentsIntoCells(connected, width, height, glyph.fontSize, fragmentation, scale);
+    }
+    return { fallback, pieces: groups.map((group, index) => createPiece(group, image, width, scale, pad, baseline, glyph, index, fallback)) };
+  }
+
+  function assignNeighbors(particles) {
+    const cellSize = 58;
+    const buckets = new Map();
+    particles.forEach((particle, index) => {
+      const key = `${Math.floor(particle.originX / cellSize)}:${Math.floor(particle.originY / cellSize)}`;
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(index);
+    });
+    particles.forEach((particle) => {
+      const cx = Math.floor(particle.originX / cellSize);
+      const cy = Math.floor(particle.originY / cellSize);
+      const nearby = [];
+      for (let oy = -1; oy <= 1; oy += 1) {
+        for (let ox = -1; ox <= 1; ox += 1) {
+          for (const index of buckets.get(`${cx + ox}:${cy + oy}`) || []) {
+            const candidate = particles[index];
+            if (candidate === particle) continue;
+            const distance = Math.hypot(candidate.originX - particle.originX, candidate.originY - particle.originY);
+            if (distance < 72) nearby.push({ index, distance });
+          }
+        }
+      }
+      particle.neighbors = nearby.sort((a, b) => a.distance - b.distance).slice(0, 6).map((item) => item.index);
+    });
+  }
+
+  function setGenerating(isGenerating) {
+    els.compose.classList.toggle("is-working", isGenerating);
+    els.compose.querySelector("span:first-child").textContent = isGenerating ? "正在分析字形…" : "生成画布";
+    els.compose.disabled = isGenerating;
+  }
+
+  function waitForPaint() { return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))); }
+
+  async function compose() {
+    if (!els.input.value.trim()) { els.input.focus(); els.state.textContent = "请输入文字"; return; }
+    setGenerating(true);
+    els.state.textContent = "正在分析字形";
+    await waitForPaint();
+    const settings = getLayout();
+    const laidOut = layoutGlyphs(els.input.value, settings);
+    const particles = [];
+    let fallbackCount = 0;
+    for (let i = 0; i < laidOut.glyphs.length; i += 1) {
+      const result = splitGlyph(laidOut.glyphs[i], settings.fragmentation);
+      if (result.fallback) fallbackCount += 1;
+      particles.push(...result.pieces);
+      if (i % 16 === 0) await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    assignNeighbors(particles);
+    Object.assign(state, { width: settings.width, height: settings.height, particles, generated: true, paused: false, lastTime: 0, elapsed: 0 });
+    els.canvasShell.classList.remove("is-empty");
+    els.empty.hidden = true;
+    els.hint.hidden = false;
+    els.hint.style.opacity = "1";
+    clearTimeout(state.hintTimer);
+    state.hintTimer = setTimeout(() => { els.hint.style.opacity = "0"; }, 4800);
+    els.export.disabled = false;
+    els.reset.disabled = false;
+    els.pause.disabled = false;
+    els.pause.innerHTML = '<span aria-hidden="true">Ⅱ</span> 暂停';
+    els.statGlyphs.textContent = laidOut.glyphs.length.toLocaleString("zh-CN");
+    els.statParts.textContent = particles.length.toLocaleString("zh-CN");
+    els.statFallback.textContent = fallbackCount.toLocaleString("zh-CN");
+    els.state.textContent = "可以触碰";
+    const clippedMessage = laidOut.clipped ? " 版面已满，超出文字未绘制。" : "";
+    els.analysisNote.textContent = `当前按“${fragmentationName(settings.fragmentation)}”尺度生成 ${particles.length} 个碎片；${fallbackCount} 个字采用整字降级。${clippedMessage}`;
+    setGenerating(false);
+    resizeCanvas();
+    cancelAnimationFrame(state.raf);
+    state.raf = requestAnimationFrame(animate);
+  }
+
+  function resetParticles() {
+    for (const p of state.particles) {
+      Object.assign(p, { x: p.originX, y: p.originY, vx: 0, vy: 0, angle: 0, angularVelocity: 0, active: false, activeAge: 0, damage: 0 });
+    }
+    state.paused = false;
+    els.pause.innerHTML = '<span aria-hidden="true">Ⅱ</span> 暂停';
+    els.state.textContent = "已经复位";
+    draw();
+  }
+
+  function pointerPosition(event) {
+    const rect = els.stage.getBoundingClientRect();
+    return { x: (event.clientX - rect.left) / state.viewScale, y: (event.clientY - rect.top) / state.viewScale };
+  }
+
+  function seededRandom(seed, salt) {
+    const value = Math.sin(seed * 12.9898 + salt * 78.233) * 43758.5453;
+    return value - Math.floor(value);
+  }
+
+  function burstAt(x, y, intensity = 1, pointerVelocity = { x: 0, y: 0 }) {
+    if (!state.generated) return;
+    const physics = getPhysics();
+    const salt = ++state.eventCounter;
+    let affected = 0;
+    for (const p of state.particles) {
+      const dx = p.x - x;
+      const dy = p.y - y;
+      const distance = Math.max(5, Math.hypot(dx, dy));
+      if (distance > physics.radius) continue;
+      const falloff = 1 - distance / physics.radius;
+      const chance = (physics.breakRate / 100) * (0.5 + falloff * 0.5);
+      if (!p.active && physics.damageRate > 0) {
+        p.damage += (physics.damageRate / 100) * intensity * (0.35 + falloff * 0.65);
+        if (p.damage < 1 || seededRandom(p.seed, salt) > chance) continue;
+      } else if (!p.active && seededRandom(p.seed, salt) > chance) continue;
+      const jitter = (seededRandom(p.seed + 17, salt) - 0.5) * 0.7;
+      const angle = Math.atan2(dy, dx) + jitter;
+      const impulse = (physics.repulsion * 5.5 + 4) * falloff * intensity;
+      const driftKick = physics.drift * (seededRandom(p.seed + 31, salt) - 0.5) * 1.8;
+      const momentumScale = (physics.pointerMomentum / 100) * 0.55 * falloff;
+      if (!p.active) p.activeAge = 0;
+      p.active = true;
+      p.vx += Math.cos(angle) * impulse + driftKick + pointerVelocity.x * momentumScale;
+      p.vy += Math.sin(angle) * impulse + driftKick * 0.55 + pointerVelocity.y * momentumScale;
+      p.angularVelocity += (seededRandom(p.seed + 7, salt) > 0.5 ? 1 : -1) * (physics.rotation / 100) * 10 * (0.3 + falloff);
+      affected += 1;
+    }
+    if (affected) { els.state.textContent = `${affected} 个部件脱离`; els.hint.style.opacity = "0"; }
+    else if (physics.damageRate > 0) els.state.textContent = "损伤正在累积";
+  }
+
+  function update(delta) {
+    const physics = getPhysics();
+    state.elapsed += delta;
+    const velocityRetention = Math.exp(-(0.12 + physics.drag * 0.09) * delta);
+    const angularRetention = Math.exp(-(0.25 + physics.drag * 0.07) * delta);
+    const returnStrength = physics.returnForce * 0.115;
+    const cohesionStrength = physics.cohesion * 0.028;
+    for (const p of state.particles) {
+      if (!p.active) continue;
+      p.activeAge += delta;
+      if (physics.returnForce > 0) {
+        p.vx += (p.originX - p.x) * returnStrength * delta;
+        p.vy += (p.originY - p.y) * returnStrength * delta;
+        p.angularVelocity += -p.angle * returnStrength * 0.28 * delta;
+      }
+      if (physics.cohesion > 0) {
+        for (const neighborIndex of p.neighbors) {
+          const neighbor = state.particles[neighborIndex];
+          if (!neighbor || !neighbor.active) continue;
+          const nx = neighbor.x - p.x;
+          const ny = neighbor.y - p.y;
+          const distance = Math.max(7, Math.hypot(nx, ny));
+          if (distance < 110) {
+            const force = cohesionStrength * Math.min(distance, 45);
+            p.vx += (nx / distance) * force * delta * 18;
+            p.vy += (ny / distance) * force * delta * 18;
+          }
+        }
+      }
+      const driftPhase = state.elapsed * (1.2 + (p.seed % 7) * 0.08) + p.seed;
+      p.vx += Math.sin(driftPhase) * physics.drift * 0.85 * delta;
+      p.vy += (Math.cos(driftPhase * 0.79) * physics.drift * 0.65 + physics.gravity * 5.2) * delta;
+      p.vx *= velocityRetention; p.vy *= velocityRetention; p.angularVelocity *= angularRetention;
+      p.x += p.vx * delta; p.y += p.vy * delta; p.angle += p.angularVelocity * delta;
+      const halfW = Math.max(2, p.width / 2);
+      const halfH = Math.max(2, p.height / 2);
+      if (p.x < halfW) { p.x = halfW; p.vx = Math.abs(p.vx) * 0.42; }
+      else if (p.x > state.width - halfW) { p.x = state.width - halfW; p.vx = -Math.abs(p.vx) * 0.42; }
+      if (p.y < halfH) { p.y = halfH; p.vy = Math.abs(p.vy) * 0.38; }
+      else if (p.y > state.height - halfH) {
+        p.y = state.height - halfH;
+        p.vy = Math.abs(p.vy) < 28 || physics.drag > 55 ? 0 : -Math.abs(p.vy) * 0.25;
+        p.vx *= 0.82; p.angularVelocity *= 0.72;
+      }
+      if (physics.returnForce > 0) {
+        const homeDistance = Math.hypot(p.x - p.originX, p.y - p.originY);
+        const speed = Math.hypot(p.vx, p.vy);
+        if (homeDistance < 0.65 && speed < 2.2 && Math.abs(p.angle) < 0.035) {
+          Object.assign(p, { x: p.originX, y: p.originY, vx: 0, vy: 0, angle: 0, angularVelocity: 0, active: false, activeAge: 0, damage: 0 });
+        }
+      } else if (physics.drag >= 60 && p.activeAge > 0.45 && Math.hypot(p.vx, p.vy) < 8) {
+        p.vx = 0;
+        p.vy = 0;
+        p.angularVelocity = 0;
+        p.active = false;
+      }
+    }
+  }
+
+  function drawParticles(target) {
+    for (const p of state.particles) {
+      target.save();
+      target.translate(p.x, p.y);
+      target.rotate(p.angle);
+      target.drawImage(p.image, -p.width / 2, -p.height / 2, p.width, p.height);
+      target.restore();
+    }
+  }
+
+  function draw() {
+    if (!state.generated) return;
+    ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
+    ctx.clearRect(0, 0, state.width, state.height);
+    ctx.fillStyle = "#ebe5d8";
+    ctx.fillRect(0, 0, state.width, state.height);
+    ctx.globalAlpha = 0.055;
+    ctx.fillStyle = "#6f6555";
+    for (let y = 9; y < state.height; y += 19) {
+      for (let x = (y * 7) % 23; x < state.width; x += 37) ctx.fillRect(x, y, 0.7, 0.7);
+    }
+    ctx.globalAlpha = 1;
+    drawParticles(ctx);
+  }
+
+  function exportTransparentPng() {
+    if (!state.generated) return;
+    const exportScale = 2;
+    const output = document.createElement("canvas");
+    output.width = state.width * exportScale;
+    output.height = state.height * exportScale;
+    const outputContext = output.getContext("2d");
+    outputContext.scale(exportScale, exportScale);
+    drawParticles(outputContext);
+    output.toBlob((blob) => {
+      if (!blob) { els.state.textContent = "导出失败，请重试"; return; }
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+      link.href = url;
+      link.download = `汉字崩解-${timestamp}.png`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      els.state.textContent = "透明 PNG 已导出";
+    }, "image/png");
+  }
+
+  function animate(time) {
+    if (!state.generated) return;
+    if (!state.lastTime) state.lastTime = time;
+    const delta = Math.min((time - state.lastTime) / 1000, 0.032);
+    state.lastTime = time;
+    if (!state.paused) update(delta);
+    draw();
+    state.raf = requestAnimationFrame(animate);
+  }
+
+  function togglePause() {
+    state.paused = !state.paused;
+    els.pause.innerHTML = state.paused ? '<span aria-hidden="true">▶</span> 继续' : '<span aria-hidden="true">Ⅱ</span> 暂停';
+    els.state.textContent = state.paused ? "运动已暂停" : "可以触碰";
+  }
+
+  els.input.value = DEFAULT_TEXT;
+  updateCharacterCount();
+  updateAllControls();
+  applyPreset("print");
+  els.input.addEventListener("input", updateCharacterCount);
+  $("#clear-text").addEventListener("click", () => { els.input.value = ""; updateCharacterCount(); els.input.focus(); });
+  Object.values(controls).forEach((input) => {
+    input.addEventListener("input", () => {
+      formatControl(input);
+      if (input.id === "fragmentation" && state.generated) els.state.textContent = "分解尺度已改变，请重新生成";
+      else if (physicsInputs.includes(input.id) && !state.applyingPreset) {
+        const preset = PRESETS[state.activePreset];
+        els.presetDescription.innerHTML = `<strong>${preset.name} · 已微调</strong><p>${preset.description}</p>`;
+      }
+    });
+  });
+  $$(".effect-preset").forEach((button) => button.addEventListener("click", () => applyPreset(button.dataset.effect)));
+  els.compose.addEventListener("click", compose);
+  els.export.addEventListener("click", exportTransparentPng);
+  els.reset.addEventListener("click", resetParticles);
+  els.pause.addEventListener("click", togglePause);
+  els.stage.addEventListener("pointerdown", (event) => {
+    state.pointerDown = true;
+    els.stage.setPointerCapture(event.pointerId);
+    const point = pointerPosition(event);
+    state.pointer = { ...point, time: performance.now() };
+    burstAt(point.x, point.y, 1);
+  });
+  els.stage.addEventListener("pointermove", (event) => {
+    if (!state.pointerDown) return;
+    const now = performance.now();
+    if (now - state.lastBurst < 42) return;
+    state.lastBurst = now;
+    const point = pointerPosition(event);
+    const previous = state.pointer || { ...point, time: now - 16 };
+    const seconds = Math.max((now - previous.time) / 1000, 0.016);
+    const velocity = {
+      x: Math.max(-1400, Math.min(1400, (point.x - previous.x) / seconds)),
+      y: Math.max(-1400, Math.min(1400, (point.y - previous.y) / seconds)),
+    };
+    state.pointer = { ...point, time: now };
+    burstAt(point.x, point.y, 0.85, velocity);
+  });
+  function endPointer() { state.pointerDown = false; state.pointer = null; }
+  els.stage.addEventListener("pointerup", endPointer);
+  els.stage.addEventListener("pointercancel", endPointer);
+  els.stage.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); burstAt(state.width / 2, state.height / 2, 1); }
+  });
+  state.resizeObserver = new ResizeObserver(resizeCanvas);
+  state.resizeObserver.observe(els.canvasShell);
+})();

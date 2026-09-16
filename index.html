@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="将中文排版转化为可触摸、可崩解的视觉连通部件。"
+    />
+    <title>字间 · 汉字崩解实验室</title>
+    <link rel="stylesheet" href="styles.css?v=4" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <p>点击或划过画布，触发局部崩解。</p>
+        <div class="topbar-note">
+          <span class="live-dot" aria-hidden="true"></span>
+          本地运算 · 文本不会上传
+        </div>
+      </header>
+
+      <main>
+        <section class="workspace" aria-label="汉字崩解工作区">
+          <aside class="control-panel">
+            <div class="panel-heading">
+              <span>01</span>
+              <div>
+                <h2>排版原稿</h2>
+                <p>输入与设置</p>
+              </div>
+            </div>
+
+            <label class="field-label" for="text-input">
+              文本内容
+              <span id="char-count">0 / 2000</span>
+            </label>
+            <textarea id="text-input" maxlength="2000" spellcheck="false"></textarea>
+
+            <div class="input-actions">
+              <button type="button" class="text-button" id="clear-text">清空</button>
+            </div>
+
+            <div class="rule"></div>
+
+            <div class="control-group">
+              <div class="group-title">
+                <span>版面</span>
+                <small>LAYOUT</small>
+              </div>
+
+              <label class="range-row" for="layout-width">
+                <span>宽度</span>
+                <input id="layout-width" type="range" min="360" max="1000" value="720" step="10" />
+                <output for="layout-width" data-unit="px">720</output>
+              </label>
+              <label class="range-row" for="layout-height">
+                <span>高度</span>
+                <input id="layout-height" type="range" min="360" max="900" value="640" step="10" />
+                <output for="layout-height" data-unit="px">640</output>
+              </label>
+              <label class="range-row" for="font-size">
+                <span>字号</span>
+                <input id="font-size" type="range" min="18" max="54" value="31" step="1" />
+                <output for="font-size" data-unit="px">31</output>
+              </label>
+              <label class="range-row" for="line-height">
+                <span>行距</span>
+                <input id="line-height" type="range" min="1" max="2.4" value="1.65" step="0.05" />
+                <output for="line-height" data-unit="×">1.65</output>
+              </label>
+              <label class="range-row" for="letter-spacing">
+                <span>字距</span>
+                <input id="letter-spacing" type="range" min="-2" max="20" value="3" step="1" />
+                <output for="letter-spacing" data-unit="px">3</output>
+              </label>
+            </div>
+
+            <button id="compose-button" class="primary-button" type="button">
+              <span>生成画布</span>
+              <span aria-hidden="true">↗</span>
+            </button>
+          </aside>
+
+          <section class="canvas-column" aria-label="崩解画布">
+            <div class="canvas-toolbar">
+              <div>
+                <span class="toolbar-kicker">02 / 实验画布</span>
+                <strong id="canvas-state">等待生成</strong>
+              </div>
+              <div class="toolbar-actions">
+                <button id="export-button" type="button" disabled>
+                  <span aria-hidden="true">⇩</span> 导出透明 PNG
+                </button>
+                <button id="reset-button" type="button" disabled>
+                  <span aria-hidden="true">↺</span> 复位
+                </button>
+                <button id="pause-button" type="button" disabled>
+                  <span aria-hidden="true">Ⅱ</span> 暂停
+                </button>
+              </div>
+            </div>
+
+            <div id="canvas-shell" class="canvas-shell is-empty">
+              <canvas id="stage" tabindex="0" aria-label="汉字崩解交互画布"></canvas>
+              <div id="empty-state" class="empty-state">
+                <span class="empty-glyph" aria-hidden="true">散</span>
+                <p>先在左侧确定版面</p>
+                <small>生成后，点击或触摸文字使其崩解</small>
+              </div>
+              <div class="canvas-hint" id="canvas-hint" hidden>
+                <span aria-hidden="true">◎</span> 点击 · 触摸 · 拖动
+              </div>
+            </div>
+
+            <div class="analysis-strip" aria-live="polite">
+              <div>
+                <span>识别字符</span>
+                <strong id="stat-glyphs">—</strong>
+              </div>
+              <div>
+                <span>视觉部件</span>
+                <strong id="stat-parts">—</strong>
+              </div>
+              <div>
+                <span>整字降级</span>
+                <strong id="stat-fallback">—</strong>
+              </div>
+              <p id="analysis-note">按字体的像素连通区域拆分；识别不稳定时保留整字。</p>
+            </div>
+          </section>
+
+          <aside class="physics-panel">
+            <div class="panel-heading compact">
+              <span>03</span>
+              <div>
+                <h2>崩解方式</h2>
+                <p>预设与参数</p>
+              </div>
+            </div>
+
+            <div class="preset-block">
+              <div class="preset-heading">
+                <span>预设</span>
+                <small>选择后仍可继续微调</small>
+              </div>
+              <div class="effect-presets" role="group" aria-label="崩解效果预设">
+                <button type="button" class="effect-preset is-active" data-effect="print">掉字</button>
+                <button type="button" class="effect-preset" data-effect="uncanny">文字恐怖谷</button>
+                <button type="button" class="effect-preset" data-effect="water">水面</button>
+                <button type="button" class="effect-preset" data-effect="collapse">坍塌</button>
+                <button type="button" class="effect-preset" data-effect="explode">爆炸</button>
+                <button type="button" class="effect-preset" data-effect="decay">腐烂 / 侵蚀</button>
+              </div>
+            </div>
+
+            <div class="fragmentation-block">
+              <label class="parameter-label" for="fragmentation">
+                <span><strong>分解尺度</strong><small>Fragmentation</small></span>
+                <output for="fragmentation" id="fragmentation-label">部件</output>
+              </label>
+              <input id="fragmentation" type="range" min="0" max="100" value="35" step="1" />
+              <div class="scale-legend"><span>字符</span><span>部件</span><span>笔画</span><span>碎屑</span></div>
+              <p>改变尺度后需重新生成画布。</p>
+            </div>
+
+            <div class="parameter-list">
+              <label class="parameter-control" for="radius" title="鼠标或手指影响多大范围">
+                <span><strong>作用半径</strong><small>Radius</small></span>
+                <input id="radius" type="range" min="20" max="160" value="35" step="1" />
+                <output for="radius">35</output>
+              </label>
+              <label class="parameter-control" for="break-rate" title="范围内有多少部件脱离">
+                <span><strong>崩解率</strong><small>Break</small></span>
+                <input id="break-rate" type="range" min="0" max="100" value="40" step="1" />
+                <output for="break-rate">40</output>
+              </label>
+              <label class="parameter-control" for="repulsion" title="部件远离触点的力量">
+                <span><strong>排斥力</strong><small>Repulsion</small></span>
+                <input id="repulsion" type="range" min="0" max="100" value="15" step="1" />
+                <output for="repulsion">15</output>
+              </label>
+              <label class="parameter-control" for="gravity" title="部件向下运动的程度">
+                <span><strong>重力</strong><small>Gravity</small></span>
+                <input id="gravity" type="range" min="0" max="100" value="10" step="1" />
+                <output for="gravity">10</output>
+              </label>
+              <label class="parameter-control" for="drift" title="无固定方向的随机运动">
+                <span><strong>漂移</strong><small>Drift</small></span>
+                <input id="drift" type="range" min="0" max="100" value="20" step="1" />
+                <output for="drift">20</output>
+              </label>
+              <label class="parameter-control" for="rotation" title="碎片获得多少角速度">
+                <span><strong>旋转</strong><small>Rotation</small></span>
+                <input id="rotation" type="range" min="0" max="100" value="20" step="1" />
+                <output for="rotation">20</output>
+              </label>
+              <label class="parameter-control" for="drag" title="高阻尼会让碎片更快停住">
+                <span><strong>阻尼</strong><small>Drag</small></span>
+                <input id="drag" type="range" min="0" max="100" value="80" step="1" />
+                <output for="drag">80</output>
+              </label>
+              <label class="parameter-control" for="return-force" title="碎片被原位置吸引的程度">
+                <span><strong>回弹</strong><small>Return</small></span>
+                <input id="return-force" type="range" min="0" max="100" value="0" step="1" />
+                <output for="return-force">0</output>
+              </label>
+              <label class="parameter-control" for="cohesion" title="相邻碎片彼此吸引的程度">
+                <span><strong>粘连</strong><small>Cohesion</small></span>
+                <input id="cohesion" type="range" min="0" max="100" value="10" step="1" />
+                <output for="cohesion">10</output>
+              </label>
+            </div>
+
+            <details class="advanced-controls">
+              <summary>手势与侵蚀</summary>
+              <label class="parameter-control" for="pointer-momentum" title="碎片被手势移动方向带走的程度">
+                <span><strong>手势动量</strong><small>Pointer Momentum</small></span>
+                <input id="pointer-momentum" type="range" min="0" max="100" value="15" step="1" />
+                <output for="pointer-momentum">15</output>
+              </label>
+              <label class="parameter-control" for="damage-rate" title="反复经过时累积损伤的速度">
+                <span><strong>损伤速度</strong><small>Damage Rate</small></span>
+                <input id="damage-rate" type="range" min="0" max="100" value="0" step="1" />
+                <output for="damage-rate">0</output>
+              </label>
+            </details>
+
+            <div class="preset-description" id="preset-description">
+              <strong>掉字 / 印刷脱落</strong>
+              <p>局部部件轻微错位后停住，留下仍可辨认的空洞。</p>
+            </div>
+          </aside>
+        </section>
+      </main>
+
+    </div>
+
+    <noscript>这个实验需要启用 JavaScript 才能运行。</noscript>
+    <script src="app.js?v=4"></script>
+  </body>
+</html>
