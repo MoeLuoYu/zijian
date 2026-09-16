@@ -22,3 +22,4 @@ python -m http.server 4173
 - 当前崩解状态可以导出为完整、透明背景、二倍分辨率的 PNG。
 
 所有文本和图像分析都在当前浏览器内完成。
+部署于 Tencent EdgeOne Makers。
