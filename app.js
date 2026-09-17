@@ -5,42 +5,48 @@
   const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
   const DEFAULT_TEXT =
-    "文字原本安静地排列在纸上，每一笔都依靠另一笔维持自己的位置。可是当手指靠近，结构开始松动：偏旁离开字心，标点漂向边缘，句子不再只负责传递意义，也显露出重量、方向和速度。我们触碰一个词，它便从熟悉的秩序里散开；我们停止施力，它又被微弱的引力牵回原处。阅读在这里不再是一条笔直的道路，而像一间可以进入的房间。风从字缝穿过，墨色的碎片彼此避让、旋转，又在下一次触碰前短暂安静。你可以把一段记忆放进来，也可以写下尚未想清楚的问题。版面保留了文字曾经站立的位置，而运动让那些位置变得可见：每一个字既是语言，也是由形状组成的临时建筑。";
+    "示例文本：怎样最近？最近关于命之救世主X的舆论似乎爆发了，我感觉这有些不对劲。电视和报纸对温泉旅馆事件进行着各种夸张的报道，人们口耳相传着各种版本的命之救世主X，如果我不是当事人恐怕也要以为那家伙是个什么真正的暗黑邪神救世主了。而且据说检察院却有意重新调查此事——明明温泉旅馆的事件已经过去了大半年！我隐隐感到了不对劲，某种类似误导感的感受愈发强烈。难道那家伙真的还没死，并且在策划些什么？应当稍微调查一下啊，我想。";
 
   const PRESETS = {
+    breeze: {
+      name: "微风",
+      description: "大范围轻拂文字，像窗帘般缓缓摆动，松手后慢慢复位。",
+      values: { radius: 1400, breakRate: 100, repulsion: 3, gravity: 0, drift: 12, rotation: 3, drag: 65, returnForce: 35, cohesion: 0, pointerMomentum: 8, damageRate: 0 },
+    },
     print: {
-      name: "掉字 / 印刷脱落",
+      name: "印刷脱落",
       description: "局部部件轻微错位后停住，留下仍可辨认的空洞。",
       values: { radius: 35, breakRate: 40, repulsion: 15, gravity: 10, drift: 20, rotation: 20, drag: 80, returnForce: 0, cohesion: 10, pointerMomentum: 5, damageRate: 0 },
     },
     uncanny: {
       name: "文字恐怖谷",
       description: "碎片不飞远，而是互相靠拢成仍像文字的陌生团块。",
-      values: { radius: 80, breakRate: 65, repulsion: 18, gravity: 5, drift: 35, rotation: 35, drag: 65, returnForce: 0, cohesion: 55, pointerMomentum: 10, damageRate: 0 },
+      values: { radius: 60, breakRate: 65, repulsion: 18, gravity: 5, drift: 35, rotation: 35, drag: 65, returnForce: 0, cohesion: 55, pointerMomentum: 10, damageRate: 0 },
     },
     water: {
       name: "水面",
       description: "手势带走附近部件；扰动结束后，文字像水面一样恢复。",
-      values: { radius: 120, breakRate: 100, repulsion: 45, gravity: 0, drift: 8, rotation: 12, drag: 45, returnForce: 75, cohesion: 0, pointerMomentum: 75, damageRate: 0 },
+      values: { radius: 140, breakRate: 100, repulsion: 45, gravity: 0, drift: 8, rotation: 12, drag: 45, returnForce: 75, cohesion: 0, pointerMomentum: 75, damageRate: 0 },
     },
     collapse: {
       name: "坍塌",
       description: "部件失去排版支撑，在重力下坠落并停留于画布底部。",
-      values: { radius: 100, breakRate: 85, repulsion: 5, gravity: 70, drift: 15, rotation: 45, drag: 15, returnForce: 0, cohesion: 15, pointerMomentum: 8, damageRate: 0 },
+      values: { radius: 70, breakRate: 85, repulsion: 5, gravity: 40, drift: 15, rotation: 45, drag: 15, returnForce: 0, cohesion: 15, pointerMomentum: 8, damageRate: 0 },
     },
     explode: {
       name: "爆炸",
       description: "高排斥和高旋转让触点附近的部件向四周快速飞散。",
-      values: { radius: 90, breakRate: 100, repulsion: 100, gravity: 15, drift: 20, rotation: 90, drag: 10, returnForce: 0, cohesion: 0, pointerMomentum: 15, damageRate: 0 },
+      values: { radius: 90, breakRate: 100, repulsion: 100, gravity: 30, drift: 20, rotation: 90, drag: 10, returnForce: 0, cohesion: 0, pointerMomentum: 15, damageRate: 0 },
     },
     decay: {
       name: "腐烂 / 侵蚀",
       description: "反复摩擦会累积损伤；部件达到临界值后才脱落。",
-      values: { radius: 45, breakRate: 25, repulsion: 8, gravity: 20, drift: 10, rotation: 15, drag: 75, returnForce: 0, cohesion: 5, pointerMomentum: 5, damageRate: 20 },
+      values: { radius: 45, breakRate: 40, repulsion: 8, gravity: 10, drift: 10, rotation: 15, drag: 75, returnForce: 0, cohesion: 5, pointerMomentum: 5, damageRate: 50 },
     },
   };
 
   const els = {
+    undo: $("#undo-button"), exportBackground: $("#export-background-button"),
     input: $("#text-input"), count: $("#char-count"), compose: $("#compose-button"),
     export: $("#export-button"), reset: $("#reset-button"), pause: $("#pause-button"),
     stage: $("#stage"), canvasShell: $("#canvas-shell"), empty: $("#empty-state"),
@@ -54,6 +60,7 @@
   const controls = Object.fromEntries([...layoutInputs, ...physicsInputs].map((id) => [id, document.getElementById(id)]));
 
   const state = {
+    history: [], pointerId: null, generating: false, backgroundImage: null, backgroundRequest: 0,
     particles: [], width: 720, height: 640, dpr: 1, viewScale: 1,
     paused: false, generated: false, lastTime: 0, elapsed: 0, raf: 0,
     pointerDown: false, pointer: null, lastBurst: 0, eventCounter: 0,
@@ -76,6 +83,7 @@
   }
 
   function fragmentationName(value) {
+    if (value === 50) return "部件 / 笔画";
     if (value < 20) return "字符";
     if (value < 50) return "部件";
     if (value < 78) return "笔画";
@@ -126,7 +134,7 @@
       formatControl(input);
     }
     $$(".effect-preset").forEach((button) => button.classList.toggle("is-active", button.dataset.effect === key));
-    els.presetDescription.innerHTML = `<strong>${preset.name}</strong><p>${preset.description}</p>`;
+    els.presetDescription.textContent = preset.description;
     state.applyingPreset = false;
   }
 
@@ -350,6 +358,7 @@
   }
 
   function setGenerating(isGenerating) {
+    state.generating = isGenerating;
     els.compose.classList.toggle("is-working", isGenerating);
     els.compose.querySelector("span:first-child").textContent = isGenerating ? "正在分析字形…" : "生成画布";
     els.compose.disabled = isGenerating;
@@ -359,6 +368,7 @@
 
   async function compose() {
     if (!els.input.value.trim()) { els.input.focus(); els.state.textContent = "请输入文字"; return; }
+    endPointer();
     setGenerating(true);
     els.state.textContent = "正在分析字形";
     await waitForPaint();
@@ -380,6 +390,10 @@
     els.hint.style.opacity = "1";
     clearTimeout(state.hintTimer);
     state.hintTimer = setTimeout(() => { els.hint.style.opacity = "0"; }, 4800);
+    clearHistory();
+    recolorParticles();
+    updateBackgroundNote();
+    els.exportBackground.disabled = false;
     els.export.disabled = false;
     els.reset.disabled = false;
     els.pause.disabled = false;
@@ -397,6 +411,8 @@
   }
 
   function resetParticles() {
+    endPointer();
+    clearHistory();
     for (const p of state.particles) {
       Object.assign(p, { x: p.originX, y: p.originY, vx: 0, vy: 0, angle: 0, angularVelocity: 0, active: false, activeAge: 0, damage: 0 });
     }
@@ -419,6 +435,14 @@
   function burstAt(x, y, intensity = 1, pointerVelocity = { x: 0, y: 0 }) {
     if (!state.generated) return;
     const physics = getPhysics();
+    if (state.activePreset === "breeze") {
+      for (const p of state.particles) {
+        if (Math.hypot(p.originX - x, p.originY - y) <= physics.radius && seededRandom(p.seed, 1) <= physics.breakRate / 100) p.active = true;
+      }
+      els.state.textContent = "微风轻拂";
+      els.hint.style.opacity = "0";
+      return;
+    }
     const salt = ++state.eventCounter;
     let affected = 0;
     for (const p of state.particles) {
@@ -477,9 +501,19 @@
           }
         }
       }
+      if (state.activePreset === "breeze" && state.pointerDown && state.pointer) {
+        const distance = Math.hypot(p.originX - state.pointer.x, p.originY - state.pointer.y);
+        const influence = Math.max(0, 1 - distance / physics.radius);
+        const wave = state.elapsed * 1.7 - p.originY / 150 + p.originX / 360;
+        p.vx += (Math.sin(wave) * physics.drift * 5 + physics.repulsion * 4) * influence * delta;
+        p.vy += Math.cos(wave * 0.8) * physics.drift * 1.5 * influence * delta;
+        p.angularVelocity += Math.sin(wave) * physics.rotation * 0.035 * influence * delta;
+        p.vx += (state.pointer.vx || 0) * physics.pointerMomentum * 0.002 * influence * delta;
+      }
+      const breezeDrift = state.activePreset === "breeze" ? 0 : physics.drift;
       const driftPhase = state.elapsed * (1.2 + (p.seed % 7) * 0.08) + p.seed;
-      p.vx += Math.sin(driftPhase) * physics.drift * 0.85 * delta;
-      p.vy += (Math.cos(driftPhase * 0.79) * physics.drift * 0.65 + physics.gravity * 5.2) * delta;
+      p.vx += Math.sin(driftPhase) * breezeDrift * 0.85 * delta;
+      p.vy += (Math.cos(driftPhase * 0.79) * breezeDrift * 0.65 + physics.gravity * 5.2) * delta;
       p.vx *= velocityRetention; p.vy *= velocityRetention; p.angularVelocity *= angularRetention;
       p.x += p.vx * delta; p.y += p.vy * delta; p.angle += p.angularVelocity * delta;
       const halfW = Math.max(2, p.width / 2);
@@ -495,7 +529,7 @@
       if (physics.returnForce > 0) {
         const homeDistance = Math.hypot(p.x - p.originX, p.y - p.originY);
         const speed = Math.hypot(p.vx, p.vy);
-        if (homeDistance < 0.65 && speed < 2.2 && Math.abs(p.angle) < 0.035) {
+        if (!(state.activePreset === "breeze" && state.pointerDown) && homeDistance < 0.65 && speed < 2.2 && Math.abs(p.angle) < 0.035) {
           Object.assign(p, { x: p.originX, y: p.originY, vx: 0, vy: 0, angle: 0, angularVelocity: 0, active: false, activeAge: 0, damage: 0 });
         }
       } else if (physics.drag >= 60 && p.activeAge > 0.45 && Math.hypot(p.vx, p.vy) < 8) {
@@ -521,18 +555,11 @@
     if (!state.generated) return;
     ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
     ctx.clearRect(0, 0, state.width, state.height);
-    ctx.fillStyle = "#ebe5d8";
-    ctx.fillRect(0, 0, state.width, state.height);
-    ctx.globalAlpha = 0.055;
-    ctx.fillStyle = "#6f6555";
-    for (let y = 9; y < state.height; y += 19) {
-      for (let x = (y * 7) % 23; x < state.width; x += 37) ctx.fillRect(x, y, 0.7, 0.7);
-    }
-    ctx.globalAlpha = 1;
+    drawBackground(ctx);
     drawParticles(ctx);
   }
 
-  function exportTransparentPng() {
+  function exportPng(withBackground = false) {
     if (!state.generated) return;
     const exportScale = 2;
     const output = document.createElement("canvas");
@@ -540,6 +567,7 @@
     output.height = state.height * exportScale;
     const outputContext = output.getContext("2d");
     outputContext.scale(exportScale, exportScale);
+    if (withBackground) drawBackground(outputContext);
     drawParticles(outputContext);
     output.toBlob((blob) => {
       if (!blob) { els.state.textContent = "导出失败，请重试"; return; }
@@ -547,12 +575,12 @@
       const link = document.createElement("a");
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
       link.href = url;
-      link.download = `汉字崩解-${timestamp}.png`;
+      link.download = `汉字崩解-${withBackground ? "带背景" : "透明"}-${timestamp}.png`;
       document.body.appendChild(link);
       link.click();
       link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      els.state.textContent = "透明 PNG 已导出";
+      els.state.textContent = withBackground ? "带背景 PNG 已导出" : "透明 PNG 已导出";
     }, "image/png");
   }
 
@@ -572,6 +600,101 @@
     els.state.textContent = state.paused ? "运动已暂停" : "可以触碰";
   }
 
+
+  const motionKeys = ["x", "y", "vx", "vy", "angle", "angularVelocity", "active", "activeAge", "damage"];
+  function clearHistory() {
+    state.history = [];
+    els.undo.disabled = true;
+  }
+  function saveGesture() {
+    state.history.push({ particles: state.particles.map(p => motionKeys.map(key => p[key])), elapsed: state.elapsed, eventCounter: state.eventCounter });
+    if (state.history.length > 20) state.history.shift();
+    els.undo.disabled = false;
+  }
+  function undoGesture() {
+    if (state.generating) return;
+    const snapshot = state.history.pop();
+    if (!snapshot) return;
+    endPointer();
+    state.particles.forEach((p, i) => motionKeys.forEach((key, k) => { p[key] = snapshot.particles[i][k]; }));
+    state.elapsed = snapshot.elapsed;
+    state.eventCounter = snapshot.eventCounter;
+    // Freeze the restored frame so ongoing physics cannot immediately change it.
+    state.paused = true;
+    state.lastTime = 0;
+    els.pause.innerHTML = '<span aria-hidden="true">▶</span> 继续';
+    els.undo.disabled = state.history.length === 0;
+    els.state.textContent = "已撤回，点击继续可恢复运动";
+    draw();
+  }
+  function recolorParticles() {
+    for (const p of state.particles) {
+      const c = p.image.getContext("2d");
+      c.save();
+      c.globalCompositeOperation = "source-in";
+      c.fillStyle = $("#text-color").value;
+      c.fillRect(0, 0, p.image.width, p.image.height);
+      c.restore();
+    }
+    draw();
+  }
+  function drawBackground(target) {
+    target.fillStyle = $("#background-color").value;
+    target.fillRect(0, 0, state.width, state.height);
+    const img = state.backgroundImage;
+    if (!img) return;
+    const ratios = [state.width / img.width, state.height / img.height];
+    const scale = $("#background-fit").value === "cover" ? Math.max(...ratios) : Math.min(...ratios);
+    const w = img.width * scale, h = img.height * scale;
+    target.drawImage(img, (state.width - w) / 2, (state.height - h) / 2, w, h);
+  }
+  function updateBackgroundNote() {
+    const img = state.backgroundImage;
+    if (!img) { $("#background-note").textContent = "纯色背景；图片会等比例适配，不会拉伸。"; return; }
+    const w = state.generated ? state.width : getLayout().width;
+    const h = state.generated ? state.height : getLayout().height;
+    const fit = $("#background-fit").value;
+    const mismatch = Math.abs(img.width / img.height - w / h) > 0.01;
+    const scale = fit === "cover" ? Math.max(w / img.width, h / img.height) : Math.min(w / img.width, h / img.height);
+    $("#background-note").textContent = `${img.width} × ${img.height} → ${w} × ${h}。` +
+      (mismatch ? (fit === "cover" ? "已等比例铺满，边缘会被裁剪。" : "已完整显示，留白使用背景颜色。") : "比例匹配，已自动适配。") +
+      (scale > 1 ? "原图较小，放大后可能模糊。" : "");
+  }
+  $("#text-color").addEventListener("input", recolorParticles);
+  $("#background-color").addEventListener("input", draw);
+  $("#background-fit").addEventListener("change", () => { updateBackgroundNote(); draw(); });
+  $("#background-image").addEventListener("change", async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    const request = ++state.backgroundRequest;
+    if (!/^image\/(png|jpeg|webp|gif|avif)$/.test(file.type)) { $("#background-note").textContent = "请选择 PNG、JPEG、WebP、GIF 或 AVIF 图片。"; event.target.value = ""; return; }
+    const url = URL.createObjectURL(file);
+    try {
+      const img = new Image();
+      img.src = url;
+      await img.decode();
+      if (request !== state.backgroundRequest) return;
+      // Cache a static, bounded bitmap, including for animated source images.
+      const bitmap = document.createElement("canvas");
+      const scale = Math.min(1, 4096 / Math.max(img.naturalWidth, img.naturalHeight));
+      bitmap.width = Math.max(1, Math.round(img.naturalWidth * scale));
+      bitmap.height = Math.max(1, Math.round(img.naturalHeight * scale));
+      bitmap.getContext("2d").drawImage(img, 0, 0, bitmap.width, bitmap.height);
+      state.backgroundImage = bitmap;
+      $("#remove-background").disabled = false;
+      updateBackgroundNote(); draw();
+    } catch {
+      if (request === state.backgroundRequest) $("#background-note").textContent = "图片无法读取，请换一张图片。";
+    } finally { URL.revokeObjectURL(url); event.target.value = ""; }
+  });
+  $("#remove-background").addEventListener("click", () => {
+    state.backgroundRequest += 1;
+    state.backgroundImage = null;
+    $("#background-image").value = "";
+    $("#remove-background").disabled = true;
+    updateBackgroundNote(); draw();
+  });
+
   els.input.value = DEFAULT_TEXT;
   updateCharacterCount();
   updateAllControls();
@@ -584,16 +707,22 @@
       if (input.id === "fragmentation" && state.generated) els.state.textContent = "分解尺度已改变，请重新生成";
       else if (physicsInputs.includes(input.id) && !state.applyingPreset) {
         const preset = PRESETS[state.activePreset];
-        els.presetDescription.innerHTML = `<strong>${preset.name} · 已微调</strong><p>${preset.description}</p>`;
+        els.presetDescription.textContent = `${preset.description}（已微调）`;
       }
     });
   });
   $$(".effect-preset").forEach((button) => button.addEventListener("click", () => applyPreset(button.dataset.effect)));
   els.compose.addEventListener("click", compose);
-  els.export.addEventListener("click", exportTransparentPng);
+  els.export.addEventListener("click", () => exportPng(false));
+  els.exportBackground.addEventListener("click", () => exportPng(true));
+  els.undo.addEventListener("click", undoGesture);
   els.reset.addEventListener("click", resetParticles);
   els.pause.addEventListener("click", togglePause);
   els.stage.addEventListener("pointerdown", (event) => {
+    if (!state.generated || state.generating || state.pointerDown || event.button !== 0) return;
+    saveGesture();
+    state.pointerId = event.pointerId;
+    state.lastBurst = 0;
     state.pointerDown = true;
     els.stage.setPointerCapture(event.pointerId);
     const point = pointerPosition(event);
@@ -601,7 +730,7 @@
     burstAt(point.x, point.y, 1);
   });
   els.stage.addEventListener("pointermove", (event) => {
-    if (!state.pointerDown) return;
+    if (!state.pointerDown || event.pointerId !== state.pointerId) return;
     const now = performance.now();
     if (now - state.lastBurst < 42) return;
     state.lastBurst = now;
@@ -612,14 +741,21 @@
       x: Math.max(-1400, Math.min(1400, (point.x - previous.x) / seconds)),
       y: Math.max(-1400, Math.min(1400, (point.y - previous.y) / seconds)),
     };
-    state.pointer = { ...point, time: now };
+    state.pointer = { ...point, time: now, vx: velocity.x };
     burstAt(point.x, point.y, 0.85, velocity);
   });
-  function endPointer() { state.pointerDown = false; state.pointer = null; }
+  function endPointer(event) {
+    if (event && event.pointerId !== state.pointerId) return;
+    const id = state.pointerId;
+    state.pointerDown = false; state.pointer = null; state.pointerId = null;
+    if (id !== null && els.stage.hasPointerCapture(id)) els.stage.releasePointerCapture(id);
+  }
   els.stage.addEventListener("pointerup", endPointer);
   els.stage.addEventListener("pointercancel", endPointer);
+  els.stage.addEventListener("lostpointercapture", endPointer);
+  window.addEventListener("blur", () => endPointer());
   els.stage.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); burstAt(state.width / 2, state.height / 2, 1); }
+    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); if (!state.generated || state.generating || event.repeat) return; saveGesture(); burstAt(state.width / 2, state.height / 2, 1); }
   });
   state.resizeObserver = new ResizeObserver(resizeCanvas);
   state.resizeObserver.observe(els.canvasShell);

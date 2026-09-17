@@ -8,7 +8,7 @@
       content="将中文排版转化为可触摸、可崩解的视觉连通部件。"
     />
     <title>字间 · 汉字崩解实验室</title>
-    <link rel="stylesheet" href="styles.css?v=4" />
+    <link rel="stylesheet" href="styles.css?v=5" />
   </head>
   <body>
     <div class="shell">
@@ -76,6 +76,19 @@
               </label>
             </div>
 
+            <div class="appearance-controls">
+              <label class="color-row" for="text-color">文字颜色 <input id="text-color" type="color" value="#25231f" /></label>
+              <div class="group-title"><span>背景</span><small>BACKGROUND</small></div>
+              <label class="color-row" for="background-color">背景颜色 <input id="background-color" type="color" value="#ffffff" /></label>
+              <label class="field-label" for="background-image">上传背景图</label>
+              <input id="background-image" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif" />
+              <label class="fit-row" for="background-fit">图片适配
+                <select id="background-fit"><option value="contain">完整显示（保留底色）</option><option value="cover">铺满画布（居中裁剪）</option></select>
+              </label>
+              <button id="remove-background" class="text-button" type="button" disabled>移除背景图</button>
+              <p id="background-note" class="appearance-note" aria-live="polite">默认纯白背景；图片会等比例适配，不会拉伸。</p>
+            </div>
+
             <button id="compose-button" class="primary-button" type="button">
               <span>生成画布</span>
               <span aria-hidden="true">↗</span>
@@ -92,6 +105,8 @@
                 <button id="export-button" type="button" disabled>
                   <span aria-hidden="true">⇩</span> 导出透明 PNG
                 </button>
+                <button id="export-background-button" type="button" disabled>⇩ 导出带背景 PNG</button>
+                <button id="undo-button" type="button" disabled>↶ 撤回</button>
                 <button id="reset-button" type="button" disabled>
                   <span aria-hidden="true">↺</span> 复位
                 </button>
@@ -139,35 +154,37 @@
               </div>
             </div>
 
+            <div class="fragmentation-block">
+              <label class="parameter-label" for="fragmentation">
+                <span><strong>分解尺度</strong><small>Fragmentation</small></span>
+                <output for="fragmentation" id="fragmentation-label">部件</output>
+              </label>
+              <input id="fragmentation" type="range" min="0" max="100" value="50" step="1" />
+              <div class="scale-legend"><span>字符</span><span>部件</span><span>笔画</span><span>碎屑</span></div>
+              <p><strong>改变尺度后需重新生成画布！！</strong></p>
+            </div>
+
             <div class="preset-block">
               <div class="preset-heading">
                 <span>预设</span>
                 <small>选择后仍可继续微调</small>
               </div>
               <div class="effect-presets" role="group" aria-label="崩解效果预设">
-                <button type="button" class="effect-preset is-active" data-effect="print">掉字</button>
+                <button type="button" class="effect-preset is-active" data-effect="print">印刷脱落</button>
                 <button type="button" class="effect-preset" data-effect="uncanny">文字恐怖谷</button>
                 <button type="button" class="effect-preset" data-effect="water">水面</button>
                 <button type="button" class="effect-preset" data-effect="collapse">坍塌</button>
                 <button type="button" class="effect-preset" data-effect="explode">爆炸</button>
                 <button type="button" class="effect-preset" data-effect="decay">腐烂 / 侵蚀</button>
+                <button type="button" class="effect-preset" data-effect="breeze">微风</button>
               </div>
-            </div>
-
-            <div class="fragmentation-block">
-              <label class="parameter-label" for="fragmentation">
-                <span><strong>分解尺度</strong><small>Fragmentation</small></span>
-                <output for="fragmentation" id="fragmentation-label">部件</output>
-              </label>
-              <input id="fragmentation" type="range" min="0" max="100" value="35" step="1" />
-              <div class="scale-legend"><span>字符</span><span>部件</span><span>笔画</span><span>碎屑</span></div>
-              <p>改变尺度后需重新生成画布。</p>
+              <p class="preset-caption" id="preset-description" aria-live="polite"></p>
             </div>
 
             <div class="parameter-list">
               <label class="parameter-control" for="radius" title="鼠标或手指影响多大范围">
                 <span><strong>作用半径</strong><small>Radius</small></span>
-                <input id="radius" type="range" min="20" max="160" value="35" step="1" />
+                <input id="radius" type="range" min="20" max="1600" value="35" step="1" />
                 <output for="radius">35</output>
               </label>
               <label class="parameter-control" for="break-rate" title="范围内有多少部件脱离">
@@ -210,10 +227,7 @@
                 <input id="cohesion" type="range" min="0" max="100" value="10" step="1" />
                 <output for="cohesion">10</output>
               </label>
-            </div>
 
-            <details class="advanced-controls">
-              <summary>手势与侵蚀</summary>
               <label class="parameter-control" for="pointer-momentum" title="碎片被手势移动方向带走的程度">
                 <span><strong>手势动量</strong><small>Pointer Momentum</small></span>
                 <input id="pointer-momentum" type="range" min="0" max="100" value="15" step="1" />
@@ -224,19 +238,16 @@
                 <input id="damage-rate" type="range" min="0" max="100" value="0" step="1" />
                 <output for="damage-rate">0</output>
               </label>
-            </details>
-
-            <div class="preset-description" id="preset-description">
-              <strong>掉字 / 印刷脱落</strong>
-              <p>局部部件轻微错位后停住，留下仍可辨认的空洞。</p>
             </div>
+
           </aside>
         </section>
       </main>
+      <footer>Made By CloudGamer&nbsp;&nbsp; 如果你给我看看你做出的图我会很开心！ 欢迎返图至QQ：121633668</footer>
 
     </div>
 
     <noscript>这个实验需要启用 JavaScript 才能运行。</noscript>
-    <script src="app.js?v=4"></script>
+    <script src="app.js?v=5"></script>
   </body>
 </html>

@@ -760,22 +760,7 @@ output {
   padding-inline: 22px;
 }
 
-.preset-description {
-  margin-top: 18px;
-  padding: 13px 14px;
-  border-left: 2px solid var(--red);
-  background: rgba(165, 65, 46, 0.045);
-}
 
-.preset-description strong {
-  font: 600 11px/1 var(--serif);
-}
-
-.preset-description p {
-  margin: 7px 0 0;
-  color: var(--ink-soft);
-  font: 9px/1.55 var(--serif);
-}
 
 .dial-control {
   margin: 0 -22px;
@@ -995,3 +980,19 @@ footer {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Appearance controls and compact preset guidance. */
+.appearance-controls { margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--line); }
+.color-row, .fit-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 14px; font-size: 11px; }
+.color-row input { width: 46px; height: 30px; padding: 2px; border: 1px solid var(--line-strong); background: transparent; cursor: pointer; }
+.appearance-controls input[type="file"] { width: 100%; font: 10px var(--sans); margin-bottom: 14px; }
+.fit-row select { min-width: 0; max-width: 75%; padding: 5px; color: var(--ink); background: var(--paper); border: 1px solid var(--line); font-size: 10px; }
+.appearance-note, .preset-caption { margin: 10px 0 0; color: var(--ink-soft); font: 10px/1.6 var(--serif); }
+.fragmentation-block { margin-bottom: 20px; }
+.fragmentation-block > p { font-size: 10px; }
+.parameter-control > span { flex-wrap: wrap; row-gap: 4px; }
+.canvas-toolbar { flex-wrap: wrap; gap: 12px; }
+.toolbar-actions { flex-wrap: wrap; }
+#stage { background: #fff; box-shadow: 0 2px 12px rgba(43,39,32,.08); }
+footer { justify-content: center; text-align: center; line-height: 1.8; padding-block: 18px; }
+@media (min-width: 781px) and (max-width: 1180px) { .effect-presets { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
