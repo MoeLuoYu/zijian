@@ -11,7 +11,7 @@
     breeze: {
       name: "微风",
       description: "大范围轻拂文字，像窗帘般缓缓摆动，松手后慢慢复位。",
-      values: { radius: 1400, breakRate: 100, repulsion: 3, gravity: 0, drift: 12, rotation: 3, drag: 65, returnForce: 35, cohesion: 0, pointerMomentum: 8, damageRate: 0 },
+      values: { breakRate: 100, repulsion: 3, gravity: 0, drift: 12, rotation: 3, drag: 65, returnForce: 35, cohesion: 0, pointerMomentum: 8, damageRate: 0 },
     },
     print: {
       name: "印刷脱落",
@@ -110,7 +110,8 @@
 
   function getPhysics() {
     return {
-      radius: Number(controls.radius.value), breakRate: Number(controls["break-rate"].value),
+      // Keep even the opposite corner inside the wind's falloff, independent of the slider.
+      radius: state.activePreset === "breeze" ? Math.hypot(state.width, state.height) * 1.5 : Number(controls.radius.value), breakRate: Number(controls["break-rate"].value),
       repulsion: Number(controls.repulsion.value), gravity: Number(controls.gravity.value),
       drift: Number(controls.drift.value), rotation: Number(controls.rotation.value),
       drag: Number(controls.drag.value), returnForce: Number(controls["return-force"].value),
@@ -128,10 +129,18 @@
     if (!preset) return;
     state.applyingPreset = true;
     state.activePreset = key;
+    controls.radius.disabled = key === "breeze";
+    controls.radius.closest("label").classList.toggle("is-disabled", key === "breeze");
+    controls.radius.closest("label").title = key === "breeze" ? "微风范围随当前画布尺寸自动调整，覆盖整张纸" : "鼠标或手指影响多大范围";
     for (const [name, value] of Object.entries(preset.values)) {
       const input = controls[keyFromPhysicsName(name)];
       input.value = value;
       formatControl(input);
+    }
+    if (key === "breeze") {
+      controls.radius.value = controls.radius.max;
+      formatControl(controls.radius);
+      document.querySelector('output[for="radius"]').textContent = "自动";
     }
     $$(".effect-preset").forEach((button) => button.classList.toggle("is-active", button.dataset.effect === key));
     els.presetDescription.textContent = preset.description;
